@@ -1,0 +1,8 @@
+build/
+*.o
+*.obj
+self-test.txt
+bench.txt
+frame-*.png
+motion-*.png
+panel-*.png

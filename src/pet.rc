@@ -1,0 +1,37 @@
+// 资源路径相对于仓库根目录；构建时把仓库根目录加入资源包含路径（windres -I . / CMake 已配置）。
+#include <windows.h>
+#include "resource.h"
+#pragma code_page(65001)
+IDR_ATLAS RCDATA "assets/hedgehog-atlas.png"
+IDR_EXTRA_ATLAS RCDATA "assets/hedgehog-extra.png"
+IDR_MOTION_WALK RCDATA "assets/motion-walk.png"
+IDR_MOTION_RELAX RCDATA "assets/motion-relax.png"
+IDR_MOTION_PLAY RCDATA "assets/motion-play.png"
+IDR_MOTION_FLOW RCDATA "assets/motion-vectors.bin"
+IDI_PET ICON "assets/lili.ico"
+1 RT_MANIFEST "src/app.manifest"
+1 VERSIONINFO
+FILEVERSION 3,0,0,0
+PRODUCTVERSION 3,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "080404B0"
+    BEGIN
+      VALUE "FileDescription", "栗栗 · 小刺猬桌宠\0"
+      VALUE "FileVersion", "3.0.0\0"
+      VALUE "InternalName", "LiliDesktopPet\0"
+      VALUE "OriginalFilename", "LiliDesktopPet.exe\0"
+      VALUE "ProductName", "栗栗桌宠\0"
+      VALUE "ProductVersion", "3.0.0\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0804, 1200
+  END
+END

@@ -1,0 +1,8 @@
+#pragma once
+#define IDR_ATLAS 101
+#define IDI_PET 102
+#define IDR_EXTRA_ATLAS 103
+#define IDR_MOTION_WALK 104
+#define IDR_MOTION_RELAX 105
+#define IDR_MOTION_PLAY 106
+#define IDR_MOTION_FLOW 107
