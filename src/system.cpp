@@ -3,10 +3,13 @@
 #include <shobjidl.h>
 
 namespace {
+// 以下状态只在钩子线程里读写（g_hookTarget 在线程启动前设置）。
 HHOOK g_hook = nullptr;
 HWND g_hookTarget = nullptr;
 DWORD g_lastEscDown = 0;
 bool g_escHeld = false;
+HANDLE g_hookThread = nullptr;
+DWORD g_hookThreadId = 0;
 
 // 低级键盘钩子只“旁听”Esc，始终把按键继续传给当前软件（CallNextHookEx），所以不会吞掉任何按键。
 LRESULT CALLBACK keyboardHook(int code, WPARAM wp, LPARAM lp) {
@@ -26,6 +29,23 @@ LRESULT CALLBACK keyboardHook(int code, WPARAM wp, LPARAM lp) {
         } else if (down) g_lastEscDown = 0;   // 中间按了别的键，不算双击
     }
     return CallNextHookEx(g_hook, code, wp, lp);
+}
+
+// 钩子放在专用线程里：Windows 7 起，若安装钩子的线程有一次响应超时，钩子会被系统悄悄移除；
+// 界面线程偶尔会忙（例如切换大小时重新烘焙帧），专用线程只负责收键盘消息，永远不会卡住。
+struct HookStart { HINSTANCE instance; HANDLE ready; bool ok; };
+DWORD WINAPI hookThread(LPVOID parameter) {
+    auto* start = static_cast<HookStart*>(parameter);
+    MSG message{};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);   // 先建立消息队列，便于接收 WM_QUIT
+    g_lastEscDown = 0; g_escHeld = false;
+    g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardHook, start->instance, 0);
+    start->ok = g_hook != nullptr;
+    SetEvent(start->ready);   // 之后不再访问 start
+    if (!g_hook) return 1;
+    while (GetMessageW(&message, nullptr, 0, 0) > 0) { TranslateMessage(&message); DispatchMessageW(&message); }
+    UnhookWindowsHookEx(g_hook); g_hook = nullptr;
+    return 0;
 }
 
 // 线程自己持有窗口句柄和事件句柄的副本，即使查询回收站很慢、退出时没能及时结束，也不会访问已释放的对象。
@@ -120,8 +140,12 @@ void PetApp::menu(POINT point) {
 // ---------- 快捷键 ----------
 void PetApp::releaseHotkey() {
     if (hwnd) UnregisterHotKey(hwnd, HOTKEY_ID);
-    if (g_hook) { UnhookWindowsHookEx(g_hook); g_hook = nullptr; }
-    g_hookTarget = nullptr; g_lastEscDown = 0; g_escHeld = false;
+    if (g_hookThread) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        if (WaitForSingleObject(g_hookThread, 2000) != WAIT_OBJECT_0) TerminateThread(g_hookThread, 0);
+        CloseHandle(g_hookThread); g_hookThread = nullptr; g_hookThreadId = 0;
+    }
+    g_hookTarget = nullptr;
     hotkeyReady = false; actualHotkey = -1;
 }
 
@@ -138,12 +162,21 @@ void PetApp::configureHotkey() {
     case HOTKEY_CTRL_ALT_H:
         if (registerCtrlAltH()) { actualHotkey = HOTKEY_CTRL_ALT_H; hotkeyStatus = L"Ctrl + Alt + H 隐藏 / 显示"; }
         break;
-    default:
+    default: {
         g_hookTarget = hwnd;
-        g_hook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardHook, instance, 0);
-        if (g_hook) { actualHotkey = HOTKEY_DOUBLE_ESC; hotkeyStatus = L"快速按两下 Esc 隐藏 / 显示（不占用 Esc）"; }
+        HookStart start{instance, CreateEventW(nullptr, TRUE, FALSE, nullptr), false};
+        if (start.ready) {
+            g_hookThread = CreateThread(nullptr, 0, hookThread, &start, 0, &g_hookThreadId);
+            if (g_hookThread) {
+                WaitForSingleObject(start.ready, INFINITE);   // 线程设置 ready 之后不再访问 start（它在本函数栈上）
+                if (!start.ok) { WaitForSingleObject(g_hookThread, 1000); CloseHandle(g_hookThread); g_hookThread = nullptr; g_hookThreadId = 0; }
+            }
+            CloseHandle(start.ready);
+        }
+        if (g_hookThread && start.ok) { actualHotkey = HOTKEY_DOUBLE_ESC; hotkeyStatus = L"快速按两下 Esc 隐藏 / 显示（不占用 Esc）"; }
         else if (registerCtrlAltH()) { g_hookTarget = nullptr; actualHotkey = HOTKEY_CTRL_ALT_H; hotkeyStatus = L"双击 Esc 不可用，改用 Ctrl + Alt + H"; }
         break;
+    }
     }
     hotkeyReady = actualHotkey >= 0;
     if (!hotkeyReady) hotkeyStatus = L"快捷键被占用，请使用托盘图标";
