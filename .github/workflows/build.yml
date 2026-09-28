@@ -1,0 +1,48 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Self-test on real Windows
+        shell: pwsh
+        run: |
+          Set-Location build/Release
+          $p = Start-Process -FilePath .\LiliDesktopPet.exe -ArgumentList '--self-test' -PassThru -Wait
+          Get-Content self-test.txt | Select-String -NotMatch '^PASS (frame_|PNG)'
+          if (-not (Select-String -Path self-test.txt -Pattern 'RESULT=PASS' -Quiet)) { throw "self-test failed (exit $($p.ExitCode))" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LiliDesktopPet-msvc
+          path: |
+            build/Release/LiliDesktopPet.exe
+            build/Release/self-test.txt
+            build/Release/panel-*.png
+            build/Release/interaction.png
+            build/Release/bubble.png
+
+  mingw-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64
+      - name: Unit tests + cross build
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LiliDesktopPet-mingw
+          path: build/LiliDesktopPet.exe

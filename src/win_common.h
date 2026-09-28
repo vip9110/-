@@ -15,8 +15,10 @@
 #include <shlobj.h>
 #include <objidl.h>
 #include <ole2.h>
-#include <gdiplus.h>
 #include <algorithm>
+// MSVC 的 GDI+ 头文件在 NOMINMAX 下需要 min/max。
+namespace Gdiplus { using std::min; using std::max; }
+#include <gdiplus.h>
 #include <array>
 #include <cmath>
 #include <cstdint>

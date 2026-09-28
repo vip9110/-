@@ -28,16 +28,20 @@ LRESULT CALLBACK keyboardHook(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(g_hook, code, wp, lp);
 }
 
+// 线程自己持有窗口句柄和事件句柄的副本，即使查询回收站很慢、退出时没能及时结束，也不会访问已释放的对象。
+struct BinWatcherArgs { HWND target; HANDLE stop, wake; };
 DWORD WINAPI binWatcher(LPVOID parameter) {
-    auto* app = static_cast<PetApp*>(parameter);
+    std::unique_ptr<BinWatcherArgs> args(static_cast<BinWatcherArgs*>(parameter));
     HRESULT com = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    HANDLE events[2] = {app->binStop, app->binWake};
+    HANDLE events[2] = {args->stop, args->wake};
     for (;;) {
         SHQUERYRBINFO info{}; info.cbSize = sizeof(info);
         HRESULT result = SHQueryRecycleBinW(nullptr, &info);
-        PostMessageW(app->hwnd, WM_APP_BIN_COUNT, SUCCEEDED(result) ? 1 : 0, static_cast<LPARAM>(info.i64NumItems));
+        if (WaitForSingleObject(args->stop, 0) == WAIT_OBJECT_0) break;
+        PostMessageW(args->target, WM_APP_BIN_COUNT, SUCCEEDED(result) ? 1 : 0, static_cast<LPARAM>(info.i64NumItems));
         if (WaitForMultipleObjects(2, events, FALSE, 10000) == WAIT_OBJECT_0) break;
     }
+    CloseHandle(args->stop); CloseHandle(args->wake);
     if (SUCCEEDED(com)) CoUninitialize();
     return 0;
 }
@@ -151,8 +155,14 @@ bool PetApp::startBinWatcher() {
     binStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     binWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!binStop || !binWake) return false;
+    auto args = std::make_unique<BinWatcherArgs>(BinWatcherArgs{hwnd, nullptr, nullptr});
+    HANDLE self = GetCurrentProcess();
+    if (!DuplicateHandle(self, binStop, self, &args->stop, 0, FALSE, DUPLICATE_SAME_ACCESS)) return false;
+    if (!DuplicateHandle(self, binWake, self, &args->wake, 0, FALSE, DUPLICATE_SAME_ACCESS)) { CloseHandle(args->stop); return false; }
     InterlockedExchange(&binBaselineRequest, 1);
-    binThread = CreateThread(nullptr, 0, binWatcher, this, 0, nullptr);
+    BinWatcherArgs* raw = args.release();
+    binThread = CreateThread(nullptr, 0, binWatcher, raw, 0, nullptr);
+    if (!binThread) { CloseHandle(raw->stop); CloseHandle(raw->wake); delete raw; }
     return binThread != nullptr;
 }
 
