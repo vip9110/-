@@ -4,7 +4,7 @@ import json, struct, sys
 import cv2
 import numpy as np
 from PIL import Image
-root=Path(__file__).resolve().parent
+root=Path(__file__).resolve().parent.parent
 meta=json.loads((root/'assets/sprite-metadata.json').read_text())
 sources={m['asset']:Image.open(root/'assets'/m['asset']).convert('RGBA') for m in meta}
 gray=[]

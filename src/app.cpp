@@ -37,9 +37,9 @@ bool PetApp::initialize(HINSTANCE module, bool testMode) {
     direction = cfg.dockMode == 1 ? 1 : -1;
     animation.reset(direction);
     sprites.render(animation.pose()); bodyPose = animation.pose();
-    int big = GetSystemMetrics(SM_CXICON), small = GetSystemMetrics(SM_CXSMICON);
-    icon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_PET), IMAGE_ICON, big ? big : 32, big ? big : 32, LR_DEFAULTCOLOR));
-    smallIcon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_PET), IMAGE_ICON, small ? small : 16, small ? small : 16, LR_DEFAULTCOLOR));
+    int bigSize = GetSystemMetrics(SM_CXICON), smallSize = GetSystemMetrics(SM_CXSMICON);
+    icon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_PET), IMAGE_ICON, bigSize ? bigSize : 32, bigSize ? bigSize : 32, LR_DEFAULTCOLOR));
+    smallIcon = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_PET), IMAGE_ICON, smallSize ? smallSize : 16, smallSize ? smallSize : 16, LR_DEFAULTCOLOR));
     taskbarMessage = RegisterWindowMessageW(L"TaskbarCreated");
     showMessage = RegisterWindowMessageW(SHOW_MESSAGE);
     tickTime = statClock = lastSave = GetTickCount64();

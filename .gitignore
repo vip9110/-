@@ -1,8 +1,13 @@
-build/
+/build/
 *.o
 *.obj
-self-test.txt
-bench.txt
-frame-*.png
-motion-*.png
-panel-*.png
+# --self-test / --bench / --export-anim 在当前目录生成的输出
+/self-test.txt
+/bench.txt
+/frame-*.png
+/motion-*.png
+/panel-*.png
+/anim-*.png
+/scarf-roll.png
+/bubble.png
+/interaction.png

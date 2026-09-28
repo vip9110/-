@@ -45,4 +45,31 @@ int main(int argc,char** argv) {
     for(int i=0;i<30;++i){ assert(flow.render(38,39,(i+.5f)/30,ba.data(),bb.data(),bo.data(),big)); for(int p=0;p<bigBytes;p+=4) for(int c=0;c<3;++c) assert(bo[p+c]<=bo[p+3]); }
     elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/30;
     std::cout<<"PASS scaled 384px interpolation keeps premultiplied alpha ("<<elapsed<<" ms/frame incl. validation)\n";
+    // 多帧形变：单帧权重 1 时等于原帧；两帧（与 20 相关）时接近直接成对插值；三帧时保持预乘约束。
+    for (int f : {20, 29, 15}) assert(flow.hasNeutralField(f));
+    std::vector<std::uint8_t> m20(bytes,0), m29(bytes,0), m15(bytes,0), multi(bytes), pairOut(bytes);
+    for(int y=40;y<250;++y) for(int x=50;x<210;++x){ int p=(y*side+x)*4; auto al=static_cast<std::uint8_t>(90+(x+2*y)%160);
+        m20[p+3]=al; m20[p]=al/2; m29[p+3]=al; m29[p+1]=al/2; m15[p+3]=al; m15[p+2]=al/3; }
+    {
+        int frames[1]={29}; float w[1]={1.f}; const std::uint8_t* px[1]={m29.data()};
+        assert(flow.renderMulti(frames,w,1,px,multi.data()));
+        size_t diff=0, n=0; for(int p=3;p<bytes;p+=4) if(m29[p]||multi[p]){ diff+=std::abs(int(multi[p])-int(m29[p])); ++n; }
+        std::cout<<"INFO single-frame multi morph mean alpha difference "<<double(diff)/n<<"\n";
+        assert(double(diff)/n < 12);   // 定点迭代只做两次，高频测试图案上有少量采样偏差
+    }
+    {
+        int frames[2]={20,29}; float w[2]={.6f,.4f}; const std::uint8_t* px[2]={m20.data(),m29.data()};
+        assert(flow.renderMulti(frames,w,2,px,multi.data()) && flow.render(20,29,.4f,m20.data(),m29.data(),pairOut.data()));
+        double diff=0; size_t n=0; for(int p=3;p<bytes;p+=4){ if(multi[p]||pairOut[p]){ diff+=std::abs(int(multi[p])-int(pairOut[p])); ++n; } }
+        std::cout<<"INFO multi-frame vs pairwise mean alpha difference "<<diff/n<<"\n";
+        assert(diff/n < 12);
+    }
+    {
+        int frames[3]={15,20,29}; float w[3]={.3f,.3f,.4f}; const std::uint8_t* px[3]={m15.data(),m20.data(),m29.data()};
+        PixelBox box{50,40,210,250};
+        assert(flow.renderMulti(frames,w,3,px,multi.data(),side,&box));
+        size_t visible=0; for(int p=0;p<bytes;p+=4){ for(int c=0;c<3;++c) assert(multi[p+c]<=multi[p+3]); if(multi[p+3]>60) ++visible; }
+        assert(visible > 20000);
+    }
+    std::cout<<"PASS multi-frame morph through the neutral frame keeps alpha and matches pairwise interpolation\n";
 }

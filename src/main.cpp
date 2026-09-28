@@ -183,6 +183,34 @@ int selfTest(PetApp& app) {
     std::fprintf(log, "RESULT=%s\n", ok ? "PASS" : "FAIL"); std::fclose(log);
     return ok ? 0 : 1;
 }
+// --export-anim：用真实渲染器按脚本时间轴导出 30 帧/秒的画面，供 README 预览动图使用（开发用）。
+int exportAnimation(PetApp& app) {
+    CLSID encoder = pngEncoder();
+    using M = Animation::Motion;
+    struct Step { float until; M motion; bool joy; bool scarf; const wchar_t* line; };
+    const Step steps[] = {{1.6f, M::Stand, false, false, nullptr}, {2.0f, M::Blink, false, false, nullptr}, {4.6f, M::Walk, false, false, nullptr},
+                          {8.2f, M::Stretch, false, false, nullptr}, {9.6f, M::Hop, true, false, L"嘿嘿，今天也陪着你～"}, {11.6f, M::Cheer, true, true, L"新围巾！暖暖的，好看吗？"},
+                          {13.6f, M::Enjoy, true, true, L"好舒服呀～"}, {18.3f, M::Roll, false, true, nullptr}, {19.2f, M::Stand, false, true, nullptr}};
+    app.cfg.dockMode = 0; app.petX = 800; app.petY = 700; app.animation.reset(1); app.bubble.clear();
+    int index = 0; float t = 0; const Step* previous = nullptr;
+    for (const auto& step : steps) {
+        while (t < step.until) {
+            if (&step != previous) {
+                previous = &step; app.animation.play(step.motion, true);
+                app.life.scarf = app.life.wearingScarf = step.scarf;
+                app.happyUntil = step.joy ? GetTickCount64() + 60000 : 0; app.joyMotion = step.motion;
+                if (step.line) { app.say(step.line, 600000); app.bubbleStart = GetTickCount64() - 1000; } else app.bubble.clear();
+            }
+            app.animation.advance(1 / 30.f, step.motion, 1);
+            app.draw(GetTickCount64());
+            wchar_t name[64]; std::swprintf(name, 64, L"anim-%03d.png", index++);
+            app.canvas.bitmap->Save(name, &encoder, nullptr);
+            t += 1 / 30.f;
+        }
+    }
+    return 0;
+}
+
 // --bench：分别统计合成身体、整帧绘制与提交分层窗口的耗时（开发用）。
 int bench(PetApp& app) {
     FILE* log = _wfopen(L"bench.txt", L"wb");
@@ -208,7 +236,7 @@ int bench(PetApp& app) {
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR arguments, int) {
     std::wstring args = arguments ? arguments : L"";
-    bool testing = args.find(L"--self-test") != std::wstring::npos || args.find(L"--bench") != std::wstring::npos;
+    bool testing = args.find(L"--self-test") != std::wstring::npos || args.find(L"--bench") != std::wstring::npos || args.find(L"--export-anim") != std::wstring::npos;
     HANDLE mutex = nullptr;
     if (!testing) {
         mutex = CreateMutexW(nullptr, FALSE, SINGLETON_MUTEX);
@@ -239,7 +267,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR arguments, int) {
             HWND window = CreateWindowExW(style, CLASS_NAME, APP_TITLE, WS_POPUP,
                 app->canvasLeft, app->canvasTop, app->canvas.w, app->canvas.h, nullptr, nullptr, instance, app.get());
             if (!window) { MessageBoxW(nullptr, L"桌宠窗口创建失败。", APP_TITLE, MB_ICONERROR); result = 4; }
-            else if (testing) { result = args.find(L"--bench") != std::wstring::npos ? bench(*app) : selfTest(*app); DestroyWindow(window); }
+            else if (testing) {
+                result = args.find(L"--bench") != std::wstring::npos ? bench(*app) : args.find(L"--export-anim") != std::wstring::npos ? exportAnimation(*app) : selfTest(*app);
+                DestroyWindow(window);
+            }
             else {
                 // 窗口创建后按其所在显示器的 DPI 校正（2.1 只用了系统 DPI，多显示器不同缩放时尺寸不对）。
                 using DpiFn = UINT(WINAPI*)(HWND);

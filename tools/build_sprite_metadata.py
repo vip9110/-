@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-root = Path(__file__).resolve().parent
+root = Path(__file__).resolve().parent.parent
 names = ['hedgehog-atlas.png','hedgehog-extra.png','motion-walk.png','motion-relax.png','motion-play.png']
 frames = []
 for sheet, name in enumerate(names):
@@ -44,5 +44,5 @@ for f in frames:
     l,t,r,b=f['rect']
     lines.append('    {%d,%d,%d,%d,%d,%.6ff,%.6ff,%.8ff},' % (f['sheet'],l,t,r-l,b-t,f['pivot_x'],f['pivot_y'],f['ratio']))
 lines+=['};']
-(root/'sprite_metadata.h').write_text('\n'.join(lines)+'\n',encoding='utf8')
+(root/'src'/'sprite_metadata.h').write_text('\n'.join(lines)+'\n',encoding='utf8')
 print('Registered 60 sprites with stable foot pivots; source PNGs unchanged.')

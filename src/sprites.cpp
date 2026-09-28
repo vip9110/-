@@ -148,6 +148,19 @@ void SpriteBank::render(const Animation::Pose& pose) {
         area.right = std::max(area.right, b.right); area.bottom = std::max(area.bottom, b.bottom);
     }
     if (active == 2 && flow_.render(ids[0], ids[1], weights[1] / 65536.f, frames_[ids[0]].data(), frames_[ids[1]].data(), out, side_, &area)) return;
+    {
+        // 三帧以上（动作切换时的交叉淡入）或没有直接位移向量的两帧：经由中性帧做多帧形变，避免重影。
+        std::array<int, Animation::FrameCount> order{};
+        for (int i = 0; i < active; ++i) order[i] = i;
+        std::sort(order.begin(), order.begin() + active, [&](int a, int b) { return weights[a] > weights[b]; });
+        int used = std::min(active, 4), sum = 0;
+        int frames[4]; float share[4]; const BYTE* pixels[4];
+        for (int i = 0; i < used; ++i) sum += weights[order[i]];
+        for (int i = 0; i < used; ++i) {
+            frames[i] = ids[order[i]]; share[i] = weights[order[i]] / static_cast<float>(sum); pixels[i] = frames_[frames[i]].data();
+        }
+        if (flow_.renderMulti(frames, share, used, pixels, out, side_, &area)) return;
+    }
     // 预乘像素的线性混合保持不透明度；普通叠加淡入淡出会让身体发暗、出现重影。
     std::memset(out, 0, bytes);
     for (int y = area.top; y < area.bottom; ++y) {
